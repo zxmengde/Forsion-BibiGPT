@@ -1,5 +1,6 @@
 import { reduceBilibiliSubtitleTimestamp } from '~/utils/reduceSubtitleTimestamp'
 import { fetchBilibiliSubtitleUrls } from './fetchBilibiliSubtitleUrls'
+import { fetchWithTimeout } from '~/utils/fetchWithTimeout'
 
 export async function fetchBilibiliSubtitle(
   videoId: string,
@@ -22,7 +23,8 @@ export async function fetchBilibiliSubtitle(
       : betterSubtitle?.subtitle_url
     console.log('subtitle_url', subtitleUrl)
 
-    const subtitleResponse = await fetch(subtitleUrl)
+    // 添加超时保护，避免网络慢时请求一直挂起
+    const subtitleResponse = await fetchWithTimeout(subtitleUrl, { timeout: 10000 }) // 10秒超时
     const subtitles = await subtitleResponse.json()
     const transcripts = reduceBilibiliSubtitleTimestamp(subtitles?.body, shouldShowTimestamp)
     return { title, subtitlesArray: transcripts, descriptionText, duration }

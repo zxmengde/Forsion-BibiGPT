@@ -27,6 +27,7 @@ import { EmailDialog } from '~/components/EmailDialog'
 import Link from 'next/link'
 import { SummarySettingsButton } from '~/components/SummarySettingsButton'
 import { UseFormReturn } from 'react-hook-form/dist/types/form'
+import { CommonSubtitleItem } from '~/lib/types'
 
 interface RightInfoPanelProps {
   summary?: string
@@ -36,6 +37,8 @@ interface RightInfoPanelProps {
   shouldShowTimestamp?: boolean
   videoPlayerController?: { seekTo: (seconds: number) => void } | null
   videoDuration?: number
+  subtitlesArray?: CommonSubtitleItem[] | null
+  subtitleSource?: 'subtitle' | 'audio'
   register?: any
   getValues?: UseFormReturn['getValues']
   setValue?: UseFormReturn['setValue']
@@ -50,6 +53,8 @@ export function RightInfoPanel({
   shouldShowTimestamp,
   videoPlayerController,
   videoDuration,
+  subtitlesArray,
+  subtitleSource,
   register,
   getValues,
   setValue,
@@ -58,6 +63,30 @@ export function RightInfoPanel({
   const [activeTab, setActiveTab] = useState<'summary' | 'mindmap' | 'thoughts'>('summary')
   const [showFullSummary, setShowFullSummary] = useState(false)
   const [showOriginalText, setShowOriginalText] = useState(false)
+
+  // 调试日志：显示字幕数据
+  React.useEffect(() => {
+    if (subtitlesArray && subtitlesArray.length > 0) {
+      console.log('[RightInfoPanel] 接收到字幕数据:', {
+        count: subtitlesArray.length,
+        source: subtitleSource,
+        preview: subtitlesArray.slice(0, 3).map((item) => ({
+          index: item.index,
+          time: item.s,
+          text: item.text?.substring(0, 50),
+        })),
+      })
+      // 显示完整字幕文本
+      const allText = subtitlesArray.map((item) => item.text).join('\n')
+      console.log('[RightInfoPanel] 完整字幕文本:', allText.substring(0, 1000) + (allText.length > 1000 ? '...' : ''))
+    } else {
+      console.log('[RightInfoPanel] 字幕数据为空:', {
+        subtitlesArray,
+        subtitleSource,
+        isLoading,
+      })
+    }
+  }, [subtitlesArray, subtitleSource, isLoading])
   const { toast } = useToast()
   const [isExporting, setIsExporting] = useState(false)
   const [showEmailDialog, setShowEmailDialog] = useState(false)
@@ -450,16 +479,105 @@ export function RightInfoPanel({
       {/* 原文细读模态框 */}
       {showOriginalText && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          {/* 取消按钮：使用 fixed 定位，不随内容滚动，始终在视口右上角可见 */}
+          <button
+            onClick={() => setShowOriginalText(false)}
+            className="fixed right-4 top-4 z-[60] flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-lg text-slate-500 shadow-lg backdrop-blur-sm transition-colors hover:bg-white hover:text-slate-700 dark:bg-slate-800/90 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            aria-label="关闭"
+          >
+            ✕
+          </button>
           <div className="relative max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 dark:bg-slate-800">
-            <button
-              onClick={() => setShowOriginalText(false)}
-              className="absolute right-4 top-4 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-            >
-              ✕
-            </button>
             <h2 className="mb-4 text-2xl font-bold text-slate-900 dark:text-slate-100">原文细读</h2>
             <div className="text-slate-700 dark:text-slate-300">
-              <p className="text-center text-slate-500 dark:text-slate-400">原文内容功能开发中...</p>
+              {(() => {
+                // 调试信息
+                console.log('[原文细读模态框] 当前状态:', {
+                  hasSubtitlesArray: !!subtitlesArray,
+                  subtitlesArrayLength: subtitlesArray?.length || 0,
+                  subtitleSource,
+                  isLoading,
+                })
+                return null
+              })()}
+              {subtitlesArray && subtitlesArray.length > 0 ? (
+                <div>
+                  {subtitleSource === 'audio' && (
+                    <div className="mb-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+                      <p className="font-medium">📢 音频转文字</p>
+                      <p className="mt-1 text-xs">此内容通过音频转文字功能生成，可能存在识别误差</p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {subtitlesArray.map((item, index) => {
+                      // 格式化时间戳
+                      const formatTimestamp = (seconds: number | string | undefined): string => {
+                        if (!seconds) return ''
+                        const sec = typeof seconds === 'string' ? parseFloat(seconds) : seconds
+                        if (isNaN(sec)) return ''
+                        const minutes = Math.floor(sec / 60)
+                        const secs = Math.floor(sec % 60)
+                        return `${minutes}:${secs.toString().padStart(2, '0')}`
+                      }
+
+                      const timestamp = formatTimestamp(item.s)
+                      const text = item.text?.trim() || ''
+
+                      return (
+                        <div
+                          key={index}
+                          className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50"
+                        >
+                          {shouldShowTimestamp && timestamp && (
+                            <div className="mb-1 flex items-center gap-2">
+                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {timestamp}
+                              </span>
+                              {videoPlayerController && (
+                                <button
+                                  onClick={() => {
+                                    const sec = typeof item.s === 'string' ? parseFloat(item.s) : item.s || 0
+                                    if (!isNaN(sec) && videoPlayerController.seekTo) {
+                                      videoPlayerController.seekTo(sec)
+                                    }
+                                  }}
+                                  className="rounded bg-blue-500 px-2 py-0.5 text-xs text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
+                                >
+                                  跳转
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          <p className="text-sm leading-relaxed">{text}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <BookOpen className="mb-4 h-12 w-12 text-slate-400" />
+                  <p className="text-center text-slate-500 dark:text-slate-400">
+                    {isLoading ? '正在提取字幕...' : '暂无字幕内容'}
+                  </p>
+                  {!isLoading && (
+                    <>
+                      <p className="mt-2 text-center text-xs text-slate-400 dark:text-slate-500">
+                        该视频可能没有字幕，或字幕提取失败
+                      </p>
+                      {/* 调试信息 */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="mt-4 rounded-lg bg-yellow-50 p-3 text-left text-xs text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
+                          <p className="font-medium">调试信息:</p>
+                          <p>subtitlesArray: {subtitlesArray ? `存在 (${subtitlesArray.length}条)` : 'null'}</p>
+                          <p>subtitleSource: {subtitleSource || 'undefined'}</p>
+                          <p>isLoading: {isLoading ? 'true' : 'false'}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

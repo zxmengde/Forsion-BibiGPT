@@ -1,23 +1,41 @@
 import { useState } from 'react'
 import { useToast } from '~/hooks/use-toast'
-import { UserConfig, VideoConfig } from '~/lib/types'
+import { UserConfig, VideoConfig, CommonSubtitleItem } from '~/lib/types'
 import { RATE_LIMIT_COUNT } from '~/utils/constants'
+import type { ProcessingStatus } from '~/components/ProcessingStatusWindow'
 
 export function useSummarize(showSingIn: (show: boolean) => void, enableStream: boolean = true) {
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<string>('')
   const [videoDuration, setVideoDuration] = useState<number | undefined>(undefined)
   const [videoTitle, setVideoTitle] = useState<string>('')
+  const [subtitlesArray, setSubtitlesArray] = useState<CommonSubtitleItem[] | null>(null)
+  const [subtitleSource, setSubtitleSource] = useState<'subtitle' | 'audio' | undefined>(undefined)
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
+    stage: 'idle',
+    message: '等待开始...',
+  })
   const { toast } = useToast()
 
   const resetSummary = () => {
     setSummary('')
     setVideoTitle('')
+    setSubtitlesArray(null)
+    setSubtitleSource(undefined)
+    setProcessingStatus({
+      stage: 'idle',
+      message: '等待开始...',
+    })
   }
 
   const summarize = async (videoConfig: VideoConfig, userConfig: UserConfig) => {
     setSummary('')
     setLoading(true)
+    setProcessingStatus({
+      stage: 'fetching_subtitle',
+      message: '正在提取视频字幕...',
+      progress: 0,
+    })
 
     try {
       setLoading(true)
@@ -88,6 +106,7 @@ export function useSummarize(showSingIn: (show: boolean) => void, enableStream: 
         const decoder = new TextDecoder()
         let done = false
         let metadataExtracted = false
+        let hasReceivedContent = false
 
         while (!done) {
           const { value, done: doneReading } = await reader.read()
@@ -96,43 +115,121 @@ export function useSummarize(showSingIn: (show: boolean) => void, enableStream: 
 
           let chunk = decoder.decode(value, { stream: true })
 
-          // 只在第一次chunk中查找并提取元数据
-          if (!metadataExtracted && chunk.includes('data: ')) {
-            // 尝试提取元数据（SSE格式：data: {...}\n\n）
-            // 使用更智能的方式匹配完整的JSON对象
-            const dataMatch = chunk.match(/data:\s*(\{.*?\})\s*\n\n/s)
-            if (dataMatch) {
+          // 处理 SSE 格式的消息
+          const lines = chunk.split('\n')
+          let contentChunk = ''
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.substring(6) // 移除 'data: ' 前缀
               try {
-                const metadata = JSON.parse(dataMatch[1])
-                if (metadata.type === 'metadata') {
-                  if (typeof metadata.duration === 'number') {
-                    setVideoDuration(metadata.duration)
+                const data = JSON.parse(jsonStr)
+
+                // 处理进度事件
+                if (data.type === 'progress') {
+                  setProcessingStatus({
+                    stage: data.stage as ProcessingStatus['stage'],
+                    message: data.message,
+                    progress: data.progress,
+                  })
+                  continue
+                }
+
+                // 处理元数据
+                if (data.type === 'metadata' && !metadataExtracted) {
+                  if (typeof data.duration === 'number') {
+                    setVideoDuration(data.duration)
                   }
-                  if (typeof metadata.title === 'string' && metadata.title) {
-                    console.log('[useSummarize] 接收到视频标题:', metadata.title)
-                    setVideoTitle(metadata.title)
+                  if (typeof data.title === 'string' && data.title) {
+                    console.log('[useSummarize] 接收到视频标题:', data.title)
+                    setVideoTitle(data.title)
                   }
-                  // 移除元数据部分（包括前后的换行）
-                  chunk = chunk.replace(/data:\s*\{.*?\}\s*\n\n/s, '')
+                  // 接收字幕数据（无论是否为空数组都处理）
+                  if (Array.isArray(data.subtitlesArray)) {
+                    if (data.subtitlesArray.length > 0) {
+                      console.log('[useSummarize] 接收到字幕数据:', {
+                        count: data.subtitlesArray.length,
+                        source: data.subtitleSource,
+                      })
+                      // 显示前几条字幕内容用于调试
+                      console.log(
+                        '[useSummarize] 字幕内容预览（前5条）:',
+                        data.subtitlesArray.slice(0, 5).map((item: any) => ({
+                          index: item.index,
+                          time: item.s,
+                          text: item.text?.substring(0, 50) + (item.text?.length > 50 ? '...' : ''),
+                        })),
+                      )
+                      // 显示所有字幕文本（用于调试）
+                      const allText = data.subtitlesArray.map((item: any) => item.text).join('\n')
+                      console.log(
+                        '[useSummarize] 完整字幕文本:',
+                        allText.substring(0, 500) + (allText.length > 500 ? '...' : ''),
+                      )
+                      setSubtitlesArray(data.subtitlesArray)
+                      setSubtitleSource(data.subtitleSource || 'subtitle')
+                    } else {
+                      // 接收到空数组，说明视频没有字幕
+                      console.log('[useSummarize] 接收到空字幕数组（视频无字幕）:', {
+                        source: data.subtitleSource,
+                      })
+                      setSubtitlesArray([])
+                      setSubtitleSource(data.subtitleSource || undefined)
+                    }
+                  } else {
+                    console.log('[useSummarize] 未接收到字幕数据（不是数组）:', {
+                      hasSubtitlesArray: !!data.subtitlesArray,
+                      isArray: Array.isArray(data.subtitlesArray),
+                      type: typeof data.subtitlesArray,
+                      subtitleSource: data.subtitleSource,
+                    })
+                  }
                   metadataExtracted = true
+                  continue
                 }
               } catch (e) {
-                console.error('[useSummarize] 解析元数据失败:', e, 'chunk:', chunk.substring(0, 200))
-                // 解析失败，继续处理
-                metadataExtracted = true
+                // 不是 JSON，可能是普通文本内容
+                contentChunk += jsonStr
               }
-            } else {
-              metadataExtracted = true
+            } else if (line.trim() && !line.startsWith('data:')) {
+              // 普通文本内容
+              contentChunk += line
             }
-          } else {
-            metadataExtracted = true
           }
 
           // 添加内容到summary
-          if (chunk) {
-            setSummary((prev) => prev + chunk)
+          if (contentChunk) {
+            const wasFirstContent = !hasReceivedContent
+            hasReceivedContent = true
+            setSummary((prev) => {
+              const newSummary = prev + contentChunk
+              // 更新进度：当开始接收内容时，表示正在生成总结
+              if (wasFirstContent) {
+                setProcessingStatus({
+                  stage: 'generating_summary',
+                  message: '正在生成 AI 总结...',
+                  progress: 60,
+                })
+              } else {
+                // 根据已接收的内容长度估算进度（60-95%）
+                const estimatedProgress = Math.min(95, 60 + Math.floor((newSummary.length / 2000) * 35))
+                setProcessingStatus((prev) => ({
+                  ...prev,
+                  progress: estimatedProgress,
+                }))
+              }
+              return newSummary
+            })
           }
         }
+
+        // 流结束，标记为完成
+        setProcessingStatus({
+          stage: 'completed',
+          message: '总结生成完成',
+          progress: 100,
+        })
+
         setLoading(false)
         return
       }
@@ -151,6 +248,11 @@ export function useSummarize(showSingIn: (show: boolean) => void, enableStream: 
       setLoading(false)
     } catch (e: any) {
       console.error('[fetch ERROR]', e)
+      setProcessingStatus({
+        stage: 'error',
+        message: '处理失败',
+        error: e.message || e.errorMessage,
+      })
       toast({
         variant: 'destructive',
         title: '未知错误：',
@@ -159,5 +261,17 @@ export function useSummarize(showSingIn: (show: boolean) => void, enableStream: 
       setLoading(false)
     }
   }
-  return { loading, summary, resetSummary, summarize, setSummary, videoDuration, videoTitle, setVideoTitle }
+  return {
+    loading,
+    summary,
+    resetSummary,
+    summarize,
+    setSummary,
+    videoDuration,
+    videoTitle,
+    setVideoTitle,
+    subtitlesArray,
+    subtitleSource,
+    processingStatus,
+  }
 }

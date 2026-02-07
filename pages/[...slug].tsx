@@ -24,6 +24,7 @@ import { useVideoHistory, type VideoHistory } from '~/hooks/useVideoHistory'
 import { useUserPreferences } from '~/hooks/useUserPreferences'
 import { useSmartRecommendation } from '~/hooks/useSmartRecommendation'
 import { VideoService } from '~/lib/types'
+import { ProcessingStatusWindow } from '~/components/ProcessingStatusWindow'
 import { DEFAULT_LANGUAGE } from '~/utils/constants/language'
 import { extractPage, extractUrl, extractDouyinVideoId } from '~/utils/extractUrl'
 import { getVideoIdFromUrl } from '~/utils/getVideoIdFromUrl'
@@ -78,7 +79,11 @@ export const Home: NextPage<{
     videoDuration,
     videoTitle: apiVideoTitle,
     setVideoTitle: setApiVideoTitle,
+    subtitlesArray,
+    subtitleSource,
+    processingStatus,
   } = useSummarize(showSingIn, getValues('enableStream'))
+  const [showStatusWindow, setShowStatusWindow] = useState(true)
   const { toast } = useToast()
   const { analytics } = useAnalytics()
   const { addToHistory } = useVideoHistory()
@@ -329,106 +334,121 @@ export const Home: NextPage<{
   // 如果使用新布局
   if (useNewLayout && mounted) {
     return (
-      <div
-        className="flex overflow-hidden bg-white dark:bg-slate-900"
-        style={{
-          width: '100vw',
-          height: 'calc(100vh - 64px)', // 减去 Header 高度（约64px）
-          minHeight: 'calc(100vh - 64px)',
-          maxHeight: 'calc(100vh - 64px)',
-          position: 'relative',
-        }}
-      >
-        {/* 左侧导航栏 - 20%宽度 */}
+      <>
+        {/* 实时状态窗口 */}
+        <ProcessingStatusWindow
+          status={processingStatus}
+          visible={showStatusWindow && (loading || processingStatus.stage !== 'idle')}
+          onClose={() => setShowStatusWindow(false)}
+        />
         <div
-          className="flex-shrink-0 overflow-y-auto"
+          className="flex overflow-hidden bg-white dark:bg-slate-900"
           style={{
-            width: '20%',
-            minWidth: '20%',
-            maxWidth: '20%',
-            height: '100%',
+            width: '100vw',
+            height: 'calc(100vh - 64px)', // 减去 Header 高度（约64px）
+            minHeight: 'calc(100vh - 64px)',
+            maxHeight: 'calc(100vh - 64px)',
+            position: 'relative',
           }}
         >
-          <LeftNavigation onSelectHistory={handleSelectHistory} onNewSummary={handleNewSummary} />
-        </div>
+          {/* 左侧导航栏 - 20%宽度 */}
+          <div
+            className="flex-shrink-0 overflow-y-auto"
+            style={{
+              width: '20%',
+              minWidth: '20%',
+              maxWidth: '20%',
+              height: '100%',
+            }}
+          >
+            <LeftNavigation onSelectHistory={handleSelectHistory} onNewSummary={handleNewSummary} />
+          </div>
 
-        {/* 中间内容区 - 50%宽度 */}
-        <div
-          className="flex-shrink-0 overflow-hidden"
-          style={{
-            width: '50%',
-            minWidth: '50%',
-            maxWidth: '50%',
-            height: '100%',
-          }}
-        >
-          {currentVideoId ? (
-            <CenterContent
-              videoId={currentVideoId}
-              videoUrl={currentVideoUrl}
-              videoTitle={videoTitle}
-              videoAuthor={videoAuthor}
-              isLoading={loading}
-              onPlayerReady={setVideoPlayerController}
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center p-8">
-              <UsageDescription />
-              <TypingSlogan />
-              <UsageAction />
-              <UserKeyInput value={userKey} onChange={handleApiKeyChange} />
-              <form onSubmit={handleSubmit(onFormSubmit)} className="mt-6 w-full max-w-2xl">
-                <div className="flex flex-col items-center">
-                  <input
-                    type="text"
-                    value={currentVideoUrl}
-                    onChange={handleInputChange}
-                    className="w-[80%] appearance-none rounded-lg rounded-md border bg-transparent py-3 pl-4 text-sm leading-6 text-slate-900 shadow-sm ring-1 ring-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-100"
-                    placeholder={'输入 bilibili.com/youtube.com 视频链接，按下「回车」'}
-                  />
-                  <div className="mt-4 flex justify-center">
-                    <div style={{ height: '40px' }}>
-                      <SubmitButton loading={loading} />
+          {/* 中间内容区 - 50%宽度 */}
+          <div
+            className="flex-shrink-0 overflow-hidden"
+            style={{
+              width: '50%',
+              minWidth: '50%',
+              maxWidth: '50%',
+              height: '100%',
+            }}
+          >
+            {currentVideoId ? (
+              <CenterContent
+                videoId={currentVideoId}
+                videoUrl={currentVideoUrl}
+                videoTitle={videoTitle}
+                videoAuthor={videoAuthor}
+                isLoading={loading}
+                onPlayerReady={setVideoPlayerController}
+                subtitlesArray={subtitlesArray}
+                subtitleSource={subtitleSource}
+                summary={summary}
+                userKey={userKey}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center p-8">
+                <UsageDescription />
+                <TypingSlogan />
+                <UsageAction />
+                <UserKeyInput value={userKey} onChange={handleApiKeyChange} />
+                <form onSubmit={handleSubmit(onFormSubmit)} className="mt-6 w-full max-w-2xl">
+                  <div className="flex flex-col items-center">
+                    <input
+                      type="text"
+                      value={currentVideoUrl}
+                      onChange={handleInputChange}
+                      className="w-[80%] appearance-none rounded-lg rounded-md border bg-transparent py-3 pl-4 text-sm leading-6 text-slate-900 shadow-sm ring-1 ring-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder={'输入 bilibili.com/youtube.com 视频链接，按下「回车」'}
+                    />
+                    <div className="mt-4 flex justify-center">
+                      <div style={{ height: '40px' }}>
+                        <SubmitButton loading={loading} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </form>
-            </div>
-          )}
-        </div>
+                </form>
+              </div>
+            )}
+          </div>
 
-        {/* 右侧信息栏 - 30%宽度 */}
-        <div
-          className="flex-shrink-0 overflow-y-auto"
-          style={{
-            width: '30%',
-            minWidth: '30%',
-            maxWidth: '30%',
-            height: '100%',
-          }}
-        >
-          <RightInfoPanel
-            summary={summary}
-            isLoading={loading}
-            currentVideoUrl={currentVideoUrl}
-            currentVideoId={currentVideoId}
-            shouldShowTimestamp={shouldShowTimestamp}
-            videoPlayerController={videoPlayerController}
-            register={register}
-            getValues={getValues}
-            setValue={setValue}
-            videoService={
-              currentVideoUrl.includes('bilibili')
-                ? 'bilibili'
-                : currentVideoUrl.includes('douyin')
-                ? 'douyin'
-                : currentVideoUrl.includes('youtube') || currentVideoUrl.includes('youtu.be')
-                ? 'youtube'
-                : undefined
-            }
-          />
+          {/* 右侧信息栏 - 30%宽度 */}
+          <div
+            className="flex-shrink-0 overflow-y-auto"
+            style={{
+              width: '30%',
+              minWidth: '30%',
+              maxWidth: '30%',
+              height: '100%',
+            }}
+          >
+            <RightInfoPanel
+              summary={summary}
+              isLoading={loading}
+              currentVideoUrl={currentVideoUrl}
+              currentVideoId={currentVideoId}
+              shouldShowTimestamp={shouldShowTimestamp}
+              videoPlayerController={videoPlayerController}
+              videoDuration={videoDuration}
+              subtitlesArray={subtitlesArray}
+              subtitleSource={subtitleSource}
+              register={register}
+              getValues={getValues}
+              setValue={setValue}
+              videoService={
+                currentVideoUrl.includes('bilibili')
+                  ? 'bilibili'
+                  : currentVideoUrl.includes('douyin')
+                  ? 'douyin'
+                  : currentVideoUrl.includes('youtube') || currentVideoUrl.includes('youtu.be')
+                  ? 'youtube'
+                  : undefined
+              }
+            />
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 

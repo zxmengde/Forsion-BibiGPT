@@ -54,6 +54,9 @@ export async function fetchOpenAIResult(
 
   let res: Response
   try {
+    // 对于流式响应，增加超时时间到 120 秒，因为可能需要处理大量数据
+    // 对于非流式响应，使用 60 秒超时
+    const timeout = payload.stream ? 120000 : 60000
     res = await fetch(apiUrl, {
       headers: {
         'Content-Type': 'application/json',
@@ -61,7 +64,7 @@ export async function fetchOpenAIResult(
       },
       method: 'POST',
       body: JSON.stringify(cleanPayload),
-      signal: AbortSignal.timeout(30000), // 改为 30s，Node.js 环境下足够
+      signal: AbortSignal.timeout(timeout),
     })
   } catch (fetchError: any) {
     console.error('Fetch error details:', {

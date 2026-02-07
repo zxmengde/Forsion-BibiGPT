@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Play, Pause, Volume2, Maximize, Settings, User } from 'lucide-react'
+import { VideoQAPanel } from '~/components/VideoQAPanel'
+import { CommonSubtitleItem } from '~/lib/types'
 
 export interface VideoPlayerController {
   seekTo: (seconds: number) => void
@@ -12,6 +14,10 @@ interface CenterContentProps {
   videoAuthor?: string
   isLoading?: boolean
   onPlayerReady?: (controller: VideoPlayerController | null) => void
+  subtitlesArray?: CommonSubtitleItem[] | null
+  subtitleSource?: 'subtitle' | 'audio'
+  summary?: string
+  userKey?: string
 }
 
 export function CenterContent({
@@ -21,6 +27,10 @@ export function CenterContent({
   videoAuthor,
   isLoading,
   onPlayerReady,
+  subtitlesArray,
+  subtitleSource,
+  summary,
+  userKey,
 }: CenterContentProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [volume, setVolume] = useState(100)
@@ -307,8 +317,15 @@ export function CenterContent({
         )}
       </div>
 
-      {/* 内容区域占位（可以放置其他内容） */}
-      <div className="flex-1 p-6">{/* 这里可以放置其他内容，比如评论、相关视频等 */}</div>
+      {/* AI 问答区域 */}
+      <div className="flex-1" style={{ minHeight: '200px' }}>
+        <VideoQAPanel
+          subtitlesArray={subtitlesArray || null}
+          videoTitle={videoTitle || ''}
+          userKey={userKey}
+          videoPlayerController={bilibiliPlayerUrl || youtubeVideoId ? { seekTo } : null}
+        />
+      </div>
     </div>
   )
 }

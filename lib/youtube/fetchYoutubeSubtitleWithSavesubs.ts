@@ -2,6 +2,7 @@ import { fetchYoutubeSubtitleUrls } from './fetchYoutubeSubtitleUrls'
 import { parseYoutubeSubtitle } from './parseYoutubeSubtitle'
 import { YoutubeSubtitleItem } from '~/utils/reduceSubtitleTimestamp'
 import { isDev } from '~/utils/env'
+import { fetchWithTimeout } from '~/utils/fetchWithTimeout'
 
 /**
  * 使用savesubs.com服务提取YouTube字幕
@@ -69,7 +70,9 @@ export async function fetchYoutubeSubtitleWithSavesubs(
       ? selectedSubtitle.url
       : `https://savesubs.com${selectedSubtitle.url}`
 
-    const response = await fetch(subtitleUrl, {
+    // 添加超时保护，避免网络慢时请求一直挂起
+    const response = await fetchWithTimeout(subtitleUrl, {
+      timeout: 10000, // 10秒超时
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',

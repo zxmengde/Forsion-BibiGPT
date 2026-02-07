@@ -58,7 +58,32 @@ export function getStructuredSummaryPrompt(
   duration?: number,
 ) {
   const videoTitle = title?.replace(/\n+/g, ' ').trim()
-  const videoTranscript = limitTranscriptByteLength(transcript).replace(/\n+/g, ' ').trim()
+
+  // 检测 transcript 是否包含时间戳格式（如 [MM:SS] 或 [HH:MM:SS]）
+  // 如果包含时间戳，保留换行符；否则替换为空格（向后兼容）
+  const transcriptStr = limitTranscriptByteLength(transcript)
+  // 检测时间戳格式：支持换行符分隔的格式（如 "[0:10] 文本\n[0:20] 文本"）
+  // 也支持空格分隔的格式（如 "[0:10] 文本 [0:20] 文本"）
+  const hasTimestamp = /\[\d{1,2}:\d{2}(?::\d{2})?\]/.test(transcriptStr)
+  const videoTranscript = hasTimestamp
+    ? transcriptStr.trim() // 保留换行符，确保时间戳格式正确识别
+    : transcriptStr.replace(/\n+/g, ' ').trim() // 替换换行符为空格
+
+  // 调试日志
+  const isDev =
+    typeof process !== 'undefined' && (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production')
+  if (isDev) {
+    console.log('[getStructuredSummaryPrompt] 检测到时间戳:', hasTimestamp)
+    console.log('[getStructuredSummaryPrompt] transcript 前200字符:', transcriptStr.substring(0, 200))
+    console.log('[getStructuredSummaryPrompt] videoTranscript 前200字符:', videoTranscript.substring(0, 200))
+    console.log(
+      '[getStructuredSummaryPrompt] 换行符数量:',
+      (transcriptStr.match(/\n/g) || []).length,
+      '->',
+      (videoTranscript.match(/\n/g) || []).length,
+    )
+  }
+
   const language = videoConfig.outputLanguage || DEFAULT_LANGUAGE
 
   // 添加时长约束
@@ -118,19 +143,24 @@ Screenshot at [seconds]s
 Requirements:
 1. Use EXACT markdown headers: ## 摘要, ## 亮点, ## 思考, ## 术语解释, ## 阅读全文, ## AI 润色, ## AI 改写, ## 视频主题, ## 时间线总结
 2. 摘要 must be a complete paragraph, NOT a list
-3. 亮点: Start each line with emoji, write natural content, add timestamp at the END if applicable. End with hashtags line
-4. 思考: Question as title (no "问题：" prefix), answer as content with timestamp at END if applicable
+3. 亮点: Start each line with emoji, write natural content, add timestamp at the END if applicable. End with hashtags line. **CRITICAL: Each highlight MUST be on a separate line - use line breaks (\n) between highlights.**
+4. 思考: Question as title (no "问题：" prefix), answer as content with timestamp at END if applicable. **CRITICAL: Each question-answer pair MUST be separated by a blank line. Use proper line breaks.**
 5. 术语解释: Format as "Term: Explanation" (one per line, no bullet points)
 6. Include the three section headers: ## 阅读全文, ## AI 润色, ## AI 改写 (these are just headers, no content needed)
 7. 视频主题: One line title
 8. 时间线总结: Format as "Timestamp - emoji Title" followed by "Screenshot at Xs" and detailed paragraph
 9. **CRITICAL TIMESTAMP HANDLING**: 
    - If the transcript contains timestamps in formats like "[MM:SS]" (e.g., "[0:49]"), "[HH:MM:SS]" (e.g., "[1:23:45]"), or "[seconds]" (e.g., "[49]"), you MUST extract these timestamps from the transcript
-   - When generating highlights, ALWAYS include the corresponding timestamp at the END of each highlight in MM:SS or HH:MM:SS format
-   - When generating reflections, ALWAYS include the corresponding timestamp at the END of each answer in MM:SS or HH:MM:SS format
+   - **IMPORTANT**: When the transcript has timestamps at the BEGINNING like "[0:10] text content", you MUST:
+     * Extract the timestamp "[0:10]" and convert it to "0:10" format (remove brackets)
+     * Place the timestamp at the END of the highlight/answer in MM:SS or HH:MM:SS format
+     * Example: If transcript has "[0:10] 介绍NotebookLM功能", your highlight should be "✨ 介绍NotebookLM功能 0:10" (NOT "0:10 介绍NotebookLM功能")
+   - When generating highlights, ALWAYS include the corresponding timestamp at the END of each highlight in MM:SS or HH:MM:SS format (without brackets)
+   - When generating reflections, ALWAYS include the corresponding timestamp at the END of each answer in MM:SS or HH:MM:SS format (without brackets)
    - Example: If transcript has "[0:49] passengers enjoy afternoon tea", your highlight should be "☕️ passengers enjoy afternoon tea 0:49"
    - Example: If transcript has "[49] content", convert to "0:49" format
    - If the transcript does NOT contain timestamps, you can omit timestamps or estimate based on content position
+   - **EACH highlight and reflection MUST be on a separate line with proper line breaks**
 10. Ensure all timestamps are accurate and correspond to the video content
 11. There may be typos in the subtitles, please correct them
 12. All content should be in ${language} Language

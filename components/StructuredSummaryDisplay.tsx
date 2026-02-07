@@ -236,7 +236,7 @@ export function StructuredSummaryDisplay({
               // 如果 highlight.timestamp 为空，尝试从内容中提取
               if (!timestampInContent) {
                 // 尝试匹配末尾的时间戳格式：00:45
-                const endTimestampMatch = highlight.content.match(/(\d{1,2}:\d{2}(?::\d{2})?)\s*$/)
+                const endTimestampMatch = highlight.content.match(/(\d{1,2}:\d{1,2}(?::\d{1,2})?)\s*$/)
                 if (endTimestampMatch) {
                   timestampInContent = endTimestampMatch[1]
                   mainContent = highlight.content
@@ -244,7 +244,7 @@ export function StructuredSummaryDisplay({
                     .trim()
                 } else {
                   // 尝试匹配括号格式：(00:45)
-                  const bracketTimestampMatch = highlight.content.match(/\((\d{1,2}:\d{2}(?::\d{2})?)\)/)
+                  const bracketTimestampMatch = highlight.content.match(/\((\d{1,2}:\d{1,2}(?::\d{1,2})?)\)/)
                   if (bracketTimestampMatch) {
                     timestampInContent = bracketTimestampMatch[1]
                     mainContent = highlight.content.replace(bracketTimestampMatch[0], '').trim()
@@ -285,6 +285,16 @@ export function StructuredSummaryDisplay({
               // 确保时间戳格式正确（如果是4位数字，转换为 MM:SS）
               if (timestampInContent && /^\d{4}$/.test(timestampInContent)) {
                 timestampInContent = `${timestampInContent.substring(0, 2)}:${timestampInContent.substring(2)}`
+              }
+
+              // 规范化时间戳格式（补齐单位数秒，如 8:0 -> 8:00）
+              if (timestampInContent && timestampInContent.includes(':')) {
+                const tsParts = timestampInContent.split(':')
+                if (tsParts.length === 2) {
+                  timestampInContent = `${tsParts[0]}:${tsParts[1].padStart(2, '0')}`
+                } else if (tsParts.length === 3) {
+                  timestampInContent = `${tsParts[0]}:${tsParts[1].padStart(2, '0')}:${tsParts[2].padStart(2, '0')}`
+                }
               }
 
               return (
@@ -346,7 +356,7 @@ export function StructuredSummaryDisplay({
           <div className="space-y-6">
             {structuredData.reflections.map((reflection: ReflectionItem, index: number) => {
               // 从解答末尾提取时间戳
-              const answerParts = reflection.answer.split(/(\d{1,2}:\d{2}(?::\d{2})?)\s*$/)
+              const answerParts = reflection.answer.split(/(\d{1,2}:\d{1,2}(?::\d{1,2})?)\s*$/)
               const answerContent = answerParts[0] || reflection.answer
               const timestampInAnswer = answerParts[1] || reflection.timestamp
               

@@ -2,6 +2,27 @@ import { extractSentenceWithTimestamp } from '~/utils/extractSentenceWithTimesta
 import { extractTimestamp } from '~/utils/extractTimestamp'
 import { validateAndFixTimestamp, timeStringToSeconds } from '~/utils/videoDuration'
 
+/**
+ * 规范化时间戳格式，补齐单位数的分钟或秒数
+ * 例如：8:0 -> 8:00, 1:2:3 -> 1:02:03
+ */
+function normalizeTimestamp(timestamp: string): string {
+  const parts = timestamp.split(':')
+  if (parts.length === 2) {
+    // MM:SS 格式
+    const minutes = parts[0]
+    const seconds = parts[1].padStart(2, '0')
+    return `${minutes}:${seconds}`
+  } else if (parts.length === 3) {
+    // HH:MM:SS 格式
+    const hours = parts[0]
+    const minutes = parts[1].padStart(2, '0')
+    const seconds = parts[2].padStart(2, '0')
+    return `${hours}:${minutes}:${seconds}`
+  }
+  return timestamp
+}
+
 export interface TimeSegment {
   timestamp: string
   summary: string
@@ -211,6 +232,23 @@ export function parseStructuredSummary(summary: string, maxDurationSeconds?: num
   }
   cleanSummary = cleanSummary.replace(/\\n/g, '\n')
 
+  // 如果总结中没有换行符，但包含 markdown 标题，尝试添加换行符
+  // 这是为了处理 AI 生成时没有正确添加换行符的情况
+  if (!cleanSummary.includes('\n') && cleanSummary.includes('##')) {
+    // 1. 在 markdown 标题前添加换行符（除了第一个）
+    cleanSummary = cleanSummary.replace(/([^\n])(##\s+)/g, '$1\n$2')
+    // 2. 在已知章节标题关键词后添加换行符（例如 "## 亮点✨ content" → "## 亮点\n✨ content"）
+    cleanSummary = cleanSummary.replace(/(##\s+(?:视频主题|摘要|亮点|思考|术语解释|时间线))\s*(?!\n)/g, '$1\n')
+    // 3. 在 emoji 前添加换行符（如果前面不是换行符或标题）
+    cleanSummary = cleanSummary.replace(/([^\n])([\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}])/gu, '$1\n$2')
+    // 4. 在时间戳后添加换行符（如果后面是 emoji 或新内容）
+    cleanSummary = cleanSummary.replace(/(\d{1,2}:\d{1,2})\s+([\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}])/gu, '$1\n$2')
+    // 5. 在标签行前添加换行符
+    cleanSummary = cleanSummary.replace(/([^\n])(#\w+)/g, '$1\n$2')
+    // 6. 清理多余的连续换行符
+    cleanSummary = cleanSummary.replace(/\n{3,}/g, '\n\n')
+  }
+
   // 提取视频主题
   const topicMatch = cleanSummary.match(/##\s*视频主题\s*\n+([\s\S]*?)(?=\n+##|$)/i)
   if (topicMatch) {
@@ -248,8 +286,8 @@ export function parseStructuredSummary(summary: string, maxDurationSeconds?: num
       // 1. 末尾的 00:45 或 HH:MM:SS
       // 2. 括号格式 (00:45)
       // 3. 4位数字格式 0830 (MMSS)
-      const timestampPatternEnd = /(\d{1,2}:\d{2}(?::\d{2})?)\s*$/ // 末尾格式：00:45
-      const timestampPatternBracket = /\((\d{1,2}:\d{2}(?::\d{2})?)\)/g // 括号格式：(00:45)
+      const timestampPatternEnd = /(\d{1,2}:\d{1,2}(?::\d{1,2})?)\s*$/ // 末尾格式：00:45 或 8:0
+      const timestampPatternBracket = /\((\d{1,2}:\d{1,2}(?::\d{1,2})?)\)/g // 括号格式：(00:45) 或 (8:0)
       const timestampPattern4Digits = /(\d{4})\s*$/ // 4位数字格式：0830 (MMSS)
 
       const emojiMatch = trimmed.match(emojiPattern)
@@ -293,6 +331,11 @@ export function parseStructuredSummary(summary: string, maxDurationSeconds?: num
       // 清理多余的空格
       content = content.trim()
 
+      // 规范化时间戳格式（补齐单位数秒，如 8:0 -> 8:00）
+      if (timestamp) {
+        timestamp = normalizeTimestamp(timestamp)
+      }
+
       // 校验并修正时间戳（如果提供了视频时长）
       let validatedTimestamp = timestamp
       if (timestamp && maxDurationSeconds) {
@@ -329,7 +372,7 @@ export function parseStructuredSummary(summary: string, maxDurationSeconds?: num
           result.reflections.push(currentReflection as ReflectionItem)
         }
         // 新问题开始（不包含"问题："或"解答："前缀，且不是时间戳）
-        if (trimmed && !trimmed.match(/解答[：:]/) && !trimmed.match(/^\d{1,2}:\d{2}/)) {
+        if (trimmed && !trimmed.match(/解答[：:]/) && !trimmed.match(/^\d{1,2}:\d{1,2}/)) {
           currentReflection = {
             question: trimmed,
             answer: '',
@@ -339,9 +382,9 @@ export function parseStructuredSummary(summary: string, maxDurationSeconds?: num
       } else if (currentReflection && currentReflection.question) {
         // 这是解答内容
         // 检查时间戳是否在末尾
-        const timestampMatch = trimmed.match(/(\d{1,2}:\d{2}(?::\d{2})?)\s*$/)
+        const timestampMatch = trimmed.match(/(\d{1,2}:\d{1,2}(?::\d{1,2})?)\s*$/)
         if (timestampMatch) {
-          let timestamp = timestampMatch[1]
+          let timestamp = normalizeTimestamp(timestampMatch[1])
           // 校验并修正时间戳（如果提供了视频时长）
           if (maxDurationSeconds) {
             const fixed = validateAndFixTimestamp(timestamp, maxDurationSeconds, true)
@@ -400,7 +443,7 @@ export function parseStructuredSummary(summary: string, maxDurationSeconds?: num
       const trimmed = line.trim()
 
       // 匹配时间戳行：格式 "时间戳 - emoji 标题"
-      const timestampLineMatch = trimmed.match(/^(\d{1,2}:\d{2}(?::\d{2})?)\s*-\s*(.+)/)
+      const timestampLineMatch = trimmed.match(/^(\d{1,2}:\d{1,2}(?::\d{1,2})?)\s*-\s*(.+)/)
       if (timestampLineMatch) {
         // 保存之前的项
         if (currentItem && currentItem.timestamp && currentItem.content) {

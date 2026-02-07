@@ -1,6 +1,10 @@
+import { fetchWithTimeout } from '~/utils/fetchWithTimeout'
+
 export const SUBTITLE_DOWNLOADER_URL = 'https://savesubs.com'
 export async function fetchYoutubeSubtitleUrls(videoId: string) {
-  const response = await fetch(SUBTITLE_DOWNLOADER_URL + '/action/extract', {
+  // 添加超时保护，避免网络慢时请求一直挂起
+  const response = await fetchWithTimeout(SUBTITLE_DOWNLOADER_URL + '/action/extract', {
+    timeout: 10000, // 10秒超时
     method: 'POST',
     body: JSON.stringify({
       data: { url: `https://www.youtube.com/watch?v=${videoId}` },

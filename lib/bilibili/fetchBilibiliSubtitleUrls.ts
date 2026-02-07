@@ -1,4 +1,5 @@
 import { find, sample } from '~/utils/fp'
+import { fetchWithTimeout } from '~/utils/fetchWithTimeout'
 
 type BilibiliSubtitles = {
   lan: string
@@ -37,7 +38,8 @@ export const fetchBilibiliSubtitleUrls = async (
   const params = videoId.startsWith('av') ? `?aid=${videoId.slice(2)}` : `?bvid=${videoId}`
   const requestUrl = `https://api.bilibili.com/x/web-interface/view${params}`
   console.log(`fetch`, requestUrl)
-  const response = await fetch(requestUrl, commonConfig)
+  // 添加超时保护，避免网络慢时请求一直挂起
+  const response = await fetchWithTimeout(requestUrl, { ...commonConfig, timeout: 10000 }) // 10秒超时
   const json = await response.json()
 
   // support multiple parts of video
@@ -48,7 +50,8 @@ export const fetchBilibiliSubtitleUrls = async (
 
     // https://api.bilibili.com/x/player/v2?aid=865462240&cid=1035524244
     const pageUrl = `https://api.bilibili.com/x/player/v2?aid=${aid}&cid=${cid}`
-    const res = await fetch(pageUrl, commonConfig)
+    // 添加超时保护，避免网络慢时请求一直挂起
+    const res = await fetchWithTimeout(pageUrl, { ...commonConfig, timeout: 10000 }) // 10秒超时
     const j = await res.json()
 
     // r.data.subtitle.subtitles
