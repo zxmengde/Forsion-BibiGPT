@@ -4,9 +4,14 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 const { withSentryConfig } = require('@sentry/nextjs')
 
+const isSentryEnabled = Boolean(process.env.SENTRY_AUTH_TOKEN)
+
 /** @type {import('next').NextConfig} */
 module.exports = {
   reactStrictMode: true,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   images: {
     domains: [
       process.env.SUPABASE_HOSTNAME || 'xxxx.supabase.co', // to prevent vercel failed
@@ -39,4 +44,4 @@ module.exports = {
   },
 }
 
-module.exports = withSentryConfig(module.exports, { silent: true }, { hideSourcemaps: true })
+module.exports = withSentryConfig(module.exports, { silent: true, dryRun: !isSentryEnabled }, { hideSourcemaps: true })

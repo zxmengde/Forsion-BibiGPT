@@ -283,25 +283,23 @@ export function useSummarize(showSingIn: (show: boolean) => void, enableStream: 
             if (!hasReceivedContent && line.startsWith('data:')) {
               const jsonStr = line.replace(/^data:\s?/, '')
               try {
-                const eventData = JSON.parse(sseMatch[1])
+                const eventData = JSON.parse(jsonStr)
 
                 // 处理进度事件
-                if (data.type === 'progress') {
+                if (eventData.type === 'progress') {
                   setProcessingStatus((prev) => {
-                    const hasProgress = typeof data.progress === 'number'
-                    const baseProgress = hasProgress ? data.progress : prev.progress
+                    const hasProgress = typeof eventData.progress === 'number'
+                    const baseProgress = hasProgress ? eventData.progress : prev.progress
                     const progress =
-                      data.stage === 'generating_summary' && !hasReceivedContent
+                      eventData.stage === 'generating_summary' && !hasReceivedContent
                         ? prev.progress ?? baseProgress
                         : baseProgress
                     return {
-                      stage: data.stage as ProcessingStatus['stage'],
-                      message: data.message,
+                      stage: eventData.stage as ProcessingStatus['stage'],
+                      message: eventData.message,
                       progress,
                     }
                   })
-                  chunk = chunk.replace(sseMatch[0], '')
-                  foundSSE = true
                   continue
                 }
 
@@ -352,14 +350,9 @@ export function useSummarize(showSingIn: (show: boolean) => void, enableStream: 
                     })
                   }
                   metadataExtracted = true
-                  chunk = chunk.replace(sseMatch[0], '')
-                  foundSSE = true
                   continue
                 }
 
-                // 未知事件类型，也移除
-                chunk = chunk.replace(sseMatch[0], '')
-                foundSSE = true
               } catch (e) {
                 contentChunk += line + '\n'
               }

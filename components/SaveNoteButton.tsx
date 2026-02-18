@@ -7,7 +7,7 @@ export function SaveNoteButton({
   onSave,
 }: {
   text: string
-  onSave: () => Promise<void>
+  onSave: () => void | Promise<void>
   loading: boolean
 }) {
   return (

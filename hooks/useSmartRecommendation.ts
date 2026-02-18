@@ -29,23 +29,6 @@ export function useSmartRecommendation() {
       return null
     }
 
-    // 统计配置使用频率
-    const configStats: {
-      detailLevel: Record<number, number>
-      sentenceNumber: Record<number, number>
-      outlineLevel: Record<number, number>
-      outputLanguage: Record<string, number>
-      showTimestamp: Record<boolean, number>
-      showEmoji: Record<boolean, number>
-    } = {
-      detailLevel: {},
-      sentenceNumber: {},
-      outlineLevel: {},
-      outputLanguage: {},
-      showTimestamp: {},
-      showEmoji: {},
-    }
-
     // 从历史记录中提取配置（如果历史记录中保存了配置信息）
     // 注意：当前 VideoHistory 接口中没有保存配置信息，这里使用偏好设置作为备选
     const recommendedConfig: VideoConfigSchema = {
