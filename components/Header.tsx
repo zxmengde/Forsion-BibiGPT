@@ -1,9 +1,6 @@
-import { Poppins } from 'next/font/google'
-import clsx from 'clsx'
 import React from 'react'
 import SignIn from '~/components/SignIn'
 import { BASE_DOMAIN } from '~/utils/constants'
-const poppins = Poppins({ weight: '800', subsets: ['latin'] })
 
 export default function Header({ showSingIn }: { showSingIn: (show: boolean) => void }) {
   return (
@@ -11,7 +8,7 @@ export default function Header({ showSingIn }: { showSingIn: (show: boolean) => 
       <div className="flex items-center justify-between px-3 sm:px-3">
         <div className="flex items-center space-x-3">
           <a href={BASE_DOMAIN}>
-            <h2 className={clsx('text-lg sm:text-2xl', poppins.className)}>
+            <h2 className="text-lg font-extrabold sm:text-2xl">
               <span className="text-sky-400">青鸟收藏夹</span>
             </h2>
           </a>
